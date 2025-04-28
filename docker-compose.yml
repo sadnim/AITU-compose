@@ -1,0 +1,91 @@
+services:
+  # Python RAG сервис
+  rag-service:
+    build:
+      context: ./RAG_AITU
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./RAG_AITU:/app
+    env_file:
+      - ./RAG_AITU/.env
+    restart: unless-stopped
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # Node.js Бот
+  questions-bot:
+    build:
+      context: ./AITU-Questions-Bot
+      dockerfile: Dockerfile
+    ports:
+      - "9101:9101"
+    env_file:
+      - ./AITU-Questions-Bot/.env
+    restart: unless-stopped
+    networks:
+      - app-network
+    depends_on:
+      - rag-service
+
+  # Node.js Веб-сайт
+  questions-website:
+    build:
+      context: ./AITU-Questions-Website
+      dockerfile: Dockerfile
+    ports:
+      - "7000:7000"
+    env_file:
+      - ./AITU-Questions-Website/src/.env
+    restart: unless-stopped
+    networks:
+      - app-network
+    depends_on:
+      - rag-service
+
+  # Система мониторинга
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    env_file:
+      - ./grafana/config.monitoring
+    networks:
+      - app-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:
